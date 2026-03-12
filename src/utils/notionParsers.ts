@@ -1,4 +1,5 @@
 import type {
+  BlockObjectResponse,
   PageObjectResponse,
   RichTextItemResponse,
 } from "@notionhq/client/build/src/api-endpoints";
@@ -17,8 +18,158 @@ const CONTENT_PROPERTY_NAMES = [
   "text",
 ] as const;
 
+type RichTextBlockData = {
+  rich_text: RichTextItemResponse[];
+};
+
+type CaptionBlockData = {
+  caption: RichTextItemResponse[];
+};
+
+type CheckedBlockData = {
+  checked: boolean;
+};
+
+type TableRowBlockData = {
+  cells: RichTextItemResponse[][];
+};
+
+type ExpressionBlockData = {
+  expression: string;
+};
+
+type TitleBlockData = {
+  title: string;
+};
+
+type UrlBlockData = {
+  url: string;
+};
+
 function getPlainText(items: RichTextItemResponse[]): string {
   return items.map((item) => item.plain_text).join("").trim();
+}
+
+function getBlockData(block: BlockObjectResponse): unknown {
+  return (block as Record<string, unknown>)[block.type];
+}
+
+function hasRichText(data: unknown): data is RichTextBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "rich_text" in data &&
+    Array.isArray((data as RichTextBlockData).rich_text)
+  );
+}
+
+function hasCaption(data: unknown): data is CaptionBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "caption" in data &&
+    Array.isArray((data as CaptionBlockData).caption)
+  );
+}
+
+function hasCheckedState(data: unknown): data is CheckedBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "checked" in data &&
+    typeof (data as CheckedBlockData).checked === "boolean"
+  );
+}
+
+function hasTableCells(data: unknown): data is TableRowBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "cells" in data &&
+    Array.isArray((data as TableRowBlockData).cells)
+  );
+}
+
+function hasExpression(data: unknown): data is ExpressionBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "expression" in data &&
+    typeof (data as ExpressionBlockData).expression === "string"
+  );
+}
+
+function hasTitle(data: unknown): data is TitleBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "title" in data &&
+    typeof (data as TitleBlockData).title === "string"
+  );
+}
+
+function hasUrl(data: unknown): data is UrlBlockData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "url" in data &&
+    typeof (data as UrlBlockData).url === "string"
+  );
+}
+
+function formatIndentedLine(text: string, depth: number, prefix: string = ""): string {
+  return `${"  ".repeat(depth)}${prefix}${text}`;
+}
+
+function getBlockPrefix(
+  block: BlockObjectResponse,
+  data: unknown,
+): string {
+  switch (block.type) {
+    case "bulleted_list_item":
+      return "- ";
+    case "numbered_list_item":
+      return "1. ";
+    case "quote":
+      return "> ";
+    case "to_do":
+      return hasCheckedState(data) && data.checked ? "[x] " : "[ ] ";
+    default:
+      return "";
+  }
+}
+
+function getFallbackBlockText(
+  block: BlockObjectResponse,
+  data: unknown,
+): string {
+  if (hasTableCells(data)) {
+    return data.cells.map((cell) => getPlainText(cell)).join(" | ").trim();
+  }
+
+  if (hasExpression(data)) {
+    return data.expression.trim();
+  }
+
+  if (hasTitle(data)) {
+    if (block.type === "child_page") {
+      return `[페이지] ${data.title}`.trim();
+    }
+
+    if (block.type === "child_database") {
+      return `[데이터베이스] ${data.title}`.trim();
+    }
+  }
+
+  if (hasUrl(data)) {
+    return data.url.trim();
+  }
+
+  if (block.type === "divider") {
+    return "---";
+  }
+
+  return "";
 }
 
 function findPropertyByNames(
@@ -116,4 +267,31 @@ export function parseDiaryEntry(page: PageObjectResponse): DiaryEntry {
     title: parseTitle(titleProperty),
     content: parseContent(contentProperty),
   };
+}
+
+export function parseBlockText(
+  block: BlockObjectResponse,
+  depth: number = 0,
+): string[] {
+  const blockData = getBlockData(block);
+
+  if (hasRichText(blockData)) {
+    const text = getPlainText(blockData.rich_text);
+
+    if (text) {
+      return [formatIndentedLine(text, depth, getBlockPrefix(block, blockData))];
+    }
+  }
+
+  if (hasCaption(blockData)) {
+    const caption = getPlainText(blockData.caption);
+
+    if (caption) {
+      return [formatIndentedLine(caption, depth)];
+    }
+  }
+
+  const fallbackText = getFallbackBlockText(block, blockData);
+
+  return fallbackText ? [formatIndentedLine(fallbackText, depth)] : [];
 }

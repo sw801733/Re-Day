@@ -3,13 +3,15 @@ import type {
   PageObjectResponse,
   QueryDataSourceResponse,
 } from "@notionhq/client/build/src/api-endpoints";
+import { collectPaginatedAPI, isFullBlock } from "@notionhq/client";
 
 import { notionClient } from "../clients/notionClient";
 import { env } from "../config/env";
 import type { DiaryEntry } from "../types/diary";
-import { parseDiaryEntry } from "../utils/notionParsers";
+import { parseBlockText, parseDiaryEntry } from "../utils/notionParsers";
 
 const DEFAULT_LIMIT = 10;
+const MAX_NOTION_PAGE_SIZE = 100;
 
 function isFullPage(
   result: QueryDataSourceResponse["results"][number],
@@ -29,6 +31,41 @@ function isFullDatabase(database: unknown): database is DatabaseObjectResponse {
 
 function compareByDateDesc(left: DiaryEntry, right: DiaryEntry): number {
   return right.date.localeCompare(left.date);
+}
+
+async function fetchPageContent(
+  blockId: string,
+  depth: number = 0,
+): Promise<string[]> {
+  const results = await collectPaginatedAPI(notionClient.blocks.children.list, {
+    block_id: blockId,
+    page_size: MAX_NOTION_PAGE_SIZE,
+  });
+
+  const blocks = results.filter(isFullBlock);
+  const lines: string[] = [];
+
+  for (const block of blocks) {
+    const blockLines = parseBlockText(block, depth);
+    lines.push(...blockLines);
+
+    if (block.has_children) {
+      const childDepth = blockLines.length > 0 ? depth + 1 : depth;
+      lines.push(...(await fetchPageContent(block.id, childDepth)));
+    }
+  }
+
+  return lines;
+}
+
+async function attachPageContent(entry: DiaryEntry): Promise<DiaryEntry> {
+  const contentLines = await fetchPageContent(entry.id);
+  const pageContent = contentLines.join("\n").trim();
+
+  return {
+    ...entry,
+    content: pageContent || entry.content,
+  };
 }
 
 export async function fetchDiaryEntries(
@@ -59,9 +96,11 @@ export async function fetchDiaryEntries(
     ],
   });
 
-  return response.results
+  const parsedEntries = response.results
     .filter(isFullPage)
     .map(parseDiaryEntry)
     .sort(compareByDateDesc)
     .slice(0, limit);
+
+  return Promise.all(parsedEntries.map(attachPageContent));
 }
