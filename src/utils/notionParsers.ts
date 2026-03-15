@@ -4,19 +4,10 @@ import type {
   RichTextItemResponse,
 } from "@notionhq/client/build/src/api-endpoints";
 
-import type { DiaryEntry } from "../types/diary";
-
 type NotionPropertyValue = PageObjectResponse["properties"][string];
 
 const TITLE_PROPERTY_NAMES = ["Title", "title", "Name", "name", "제목"] as const;
 const DATE_PROPERTY_NAMES = ["Date", "date", "날짜"] as const;
-const CONTENT_PROPERTY_NAMES = [
-  "Content",
-  "content",
-  "내용",
-  "Text",
-  "text",
-] as const;
 
 type RichTextBlockData = {
   rich_text: RichTextItemResponse[];
@@ -45,6 +36,15 @@ type TitleBlockData = {
 type UrlBlockData = {
   url: string;
 };
+
+export interface NotionTextLine {
+  text: string;
+  plainText: string;
+  depth: number;
+  type: BlockObjectResponse["type"];
+  isHeading: boolean;
+  isListItem: boolean;
+}
 
 function getPlainText(items: RichTextItemResponse[]): string {
   return items.map((item) => item.plain_text).join("").trim();
@@ -117,14 +117,15 @@ function hasUrl(data: unknown): data is UrlBlockData {
   );
 }
 
-function formatIndentedLine(text: string, depth: number, prefix: string = ""): string {
+function formatIndentedLine(
+  text: string,
+  depth: number,
+  prefix: string = "",
+): string {
   return `${"  ".repeat(depth)}${prefix}${text}`;
 }
 
-function getBlockPrefix(
-  block: BlockObjectResponse,
-  data: unknown,
-): string {
+function getBlockPrefix(block: BlockObjectResponse, data: unknown): string {
   switch (block.type) {
     case "bulleted_list_item":
       return "- ";
@@ -132,17 +133,16 @@ function getBlockPrefix(
       return "1. ";
     case "quote":
       return "> ";
+    case "callout":
+      return "! ";
     case "to_do":
-      return hasCheckedState(data) && data.checked ? "[x] " : "[ ] ";
+      return hasCheckedState(data) && data.checked ? "- [x] " : "- [ ] ";
     default:
       return "";
   }
 }
 
-function getFallbackBlockText(
-  block: BlockObjectResponse,
-  data: unknown,
-): string {
+function getFallbackBlockText(block: BlockObjectResponse, data: unknown): string {
   if (hasTableCells(data)) {
     return data.cells.map((cell) => getPlainText(cell)).join(" | ").trim();
   }
@@ -216,70 +216,113 @@ function parseTitle(property: NotionPropertyValue | undefined): string {
   return "제목 없음";
 }
 
-function parseContent(property: NotionPropertyValue | undefined): string {
-  if (!property) {
-    return "";
-  }
-
-  if (property.type === "rich_text") {
-    return getPlainText(property.rich_text);
-  }
-
-  if (property.type === "title") {
-    return getPlainText(property.title);
-  }
-
-  return "";
-}
-
-function parseDate(
+export function parsePropertyText(
   property: NotionPropertyValue | undefined,
-  fallbackDate: string,
-): string {
-  if (property?.type === "date" && property.date?.start) {
-    return normalizeDate(property.date.start);
+): string | undefined {
+  if (!property) {
+    return undefined;
   }
 
-  if (property?.type === "created_time") {
-    return normalizeDate(property.created_time);
-  }
+  switch (property.type) {
+    case "title":
+      return getPlainText(property.title) || undefined;
+    case "rich_text":
+      return getPlainText(property.rich_text) || undefined;
+    case "select":
+      return property.select?.name?.trim() || undefined;
+    case "status":
+      return property.status?.name?.trim() || undefined;
+    case "multi_select": {
+      const value = property.multi_select
+        .map((item) => item.name.trim())
+        .filter(Boolean)
+        .join(", ");
 
-  return normalizeDate(fallbackDate);
+      return value || undefined;
+    }
+    case "date":
+      return property.date?.start ? normalizeDate(property.date.start) : undefined;
+    case "email":
+      return property.email?.trim() || undefined;
+    case "url":
+      return property.url?.trim() || undefined;
+    case "phone_number":
+      return property.phone_number?.trim() || undefined;
+    case "number":
+      return property.number === null ? undefined : String(property.number);
+    case "checkbox":
+      return property.checkbox ? "true" : "false";
+    case "created_time":
+      return normalizeDate(property.created_time);
+    case "last_edited_time":
+      return normalizeDate(property.last_edited_time);
+    default:
+      return undefined;
+  }
 }
 
-export function parseDiaryEntry(page: PageObjectResponse): DiaryEntry {
+export function parsePageTitle(page: PageObjectResponse): string {
   const titleProperty =
     findPropertyByNames(page.properties, TITLE_PROPERTY_NAMES) ??
     findPropertyByType(page.properties, "title");
 
+  return parseTitle(titleProperty);
+}
+
+export function parsePageDate(page: PageObjectResponse): string {
   const dateProperty =
     findPropertyByNames(page.properties, DATE_PROPERTY_NAMES) ??
     findPropertyByType(page.properties, "date") ??
     findPropertyByType(page.properties, "created_time");
 
-  const contentProperty =
-    findPropertyByNames(page.properties, CONTENT_PROPERTY_NAMES) ??
-    findPropertyByType(page.properties, "rich_text");
+  if (dateProperty?.type === "date" && dateProperty.date?.start) {
+    return normalizeDate(dateProperty.date.start);
+  }
 
-  return {
-    id: page.id,
-    date: parseDate(dateProperty, page.created_time),
-    title: parseTitle(titleProperty),
-    content: parseContent(contentProperty),
-  };
+  if (dateProperty?.type === "created_time") {
+    return normalizeDate(dateProperty.created_time);
+  }
+
+  return normalizeDate(page.created_time);
 }
 
-export function parseBlockText(
+export function parsePageTextProperty(
+  page: PageObjectResponse,
+  propertyNames: readonly string[],
+): string | undefined {
+  return parsePropertyText(findPropertyByNames(page.properties, propertyNames));
+}
+
+export function parseBlockLines(
   block: BlockObjectResponse,
   depth: number = 0,
-): string[] {
+): NotionTextLine[] {
   const blockData = getBlockData(block);
 
   if (hasRichText(blockData)) {
-    const text = getPlainText(blockData.rich_text);
+    const plainText = getPlainText(blockData.rich_text);
 
-    if (text) {
-      return [formatIndentedLine(text, depth, getBlockPrefix(block, blockData))];
+    if (plainText) {
+      return [
+        {
+          text: formatIndentedLine(
+            plainText,
+            depth,
+            getBlockPrefix(block, blockData),
+          ),
+          plainText,
+          depth,
+          type: block.type,
+          isHeading:
+            block.type === "heading_1" ||
+            block.type === "heading_2" ||
+            block.type === "heading_3",
+          isListItem:
+            block.type === "bulleted_list_item" ||
+            block.type === "numbered_list_item" ||
+            block.type === "to_do",
+        },
+      ];
     }
   }
 
@@ -287,11 +330,33 @@ export function parseBlockText(
     const caption = getPlainText(blockData.caption);
 
     if (caption) {
-      return [formatIndentedLine(caption, depth)];
+      return [
+        {
+          text: formatIndentedLine(caption, depth),
+          plainText: caption,
+          depth,
+          type: block.type,
+          isHeading: false,
+          isListItem: false,
+        },
+      ];
     }
   }
 
   const fallbackText = getFallbackBlockText(block, blockData);
 
-  return fallbackText ? [formatIndentedLine(fallbackText, depth)] : [];
+  if (!fallbackText) {
+    return [];
+  }
+
+  return [
+    {
+      text: formatIndentedLine(fallbackText, depth),
+      plainText: fallbackText,
+      depth,
+      type: block.type,
+      isHeading: false,
+      isListItem: false,
+    },
+  ];
 }
