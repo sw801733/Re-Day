@@ -4,15 +4,21 @@
 
 Re:Day is a small personal automation project.
 
-It reads recent diary entries from Notion, generates a short reminder card,
-and sends it to Slack on a schedule.
+It reads diary entries from Notion and sends two types of Slack messages on a schedule.
 
-The purpose is not self-improvement advice,
-but to gently revisit the recent state and flow of life.
+1. Reflection messages
+2. Reminder messages
+
+Reflection messages help revisit the recent state and flow of life.
+
+Reminder messages surface the user's written "next steps" so they are not forgotten.
+
+The goal is not to give self-improvement advice, but to gently revisit recent experiences and intentions.
 
 ---
 
 ## Priorities
+
 1. Fast MVP delivery
 2. Readable code
 3. Small incremental development
@@ -22,6 +28,7 @@ but to gently revisit the recent state and flow of life.
 ---
 
 ## Coding Guidelines
+
 - Use a simple Node.js + TypeScript structure
 - Avoid over-engineering
 - Avoid unnecessary abstractions
@@ -48,85 +55,98 @@ but to gently revisit the recent state and flow of life.
 
 All Pull Request descriptions must be written **in Korean**.
 
-PR content must preserve **proper Markdown formatting** and
-avoid broken line breaks.
+PR content must preserve **proper Markdown formatting** and avoid broken line breaks.
 
-Each PR must include the following sections:
+Each PR must include the following sections.
 
-Summary
+## Summary
 
-Short description of the feature implemented
+Short description of the feature implemented.
 
-Changes
+## Changes
 
-List of major changes
+List of major changes.
 
-Key Files
+## Key Files
 
-Important files added or modified
+Important files added or modified.
 
-How to Test
+## How to Test
 
-Steps to run or verify the feature
+Steps to run or verify the feature.
 
-Learning
+## Learning
 
-Key concepts used in this implementation
+Key concepts used in this implementation.
 
-Next Step
-
-Suggested next tasks
-
-
-The **Learning section must remain short** and focus only on key concepts.
+This section must remain short.
 
 Example:
 
 Learning
 
-async / await
-Syntax for writing Promise-based async logic in a synchronous style
+- async / await  
+  Syntax for writing Promise-based async logic in a synchronous style
 
-dotenv
-Library for loading environment variables
+- dotenv  
+  Library for loading environment variables
 
+## Next Step
+
+Suggested next development tasks.
 
 ---
 
 ## Git Workflow
+
 - Always create a feature branch
 - Never commit directly to main
 - Use small commits
 - Write clear commit messages
 - Open a Pull Request after completing a task
 
-Example branch names:
+Branch naming convention
+    feat/<feature-name>
 
+Example branches
+
+```
 feat/notion-fetch
-feat/openai-summary
+feat/diary-parser
+feat/reminder-job
+feat/reflection-job
 feat/slack-message
-feat/reminder-filter
 feat/github-actions
+```
 
-
+Commit style example
+```
+feat: add notion diary fetch
+feat: implement diary parser
+feat: add slack message sender
+```
 ---
 
 ## Current MVP Scope
-The current MVP includes:
+
+The MVP includes the following features.
 
 - Read diary entries from Notion
-- Filter entries created after the last reminder
-- Generate reminder text
-- Send Slack DM
-- Run on Monday / Thursday 07:30 KST
-- Skip sending when there are no new entries
+- Parse and normalize diary content
+- Extract "next steps" from diary entries
+- Send reminder messages to Slack
+- Generate reflection summaries
+- Send reflection messages on Monday / Thursday at 07:30 KST
+- Skip reflection messages when there are no new diary entries
 
 ---
 
 ## Development Principle
+
 Re:Day is a small personal project.
 
-Prefer:
+Prefer
+
 - Simple implementation
 - Readable code
 - Gradual extension
