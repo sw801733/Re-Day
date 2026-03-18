@@ -19,3 +19,9 @@ export interface ParsedDiaryEntry {
   nextStepsList: string[];
   summarySourceText: string;
 }
+
+export interface ReminderItem {
+  text: string;
+  count: number;
+  latestDate: string;
+}
