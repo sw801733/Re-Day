@@ -1,10 +1,10 @@
 import { fetchDiaryEntries } from "./services/fetchDiaryEntries";
-import { runReminderJob } from "./jobs/reminderJob";
+import { runReflectionJob } from "./jobs/reflectionJob";
 
 async function main(): Promise<void> {
   const diaryEntries = await fetchDiaryEntries();
-  const reminderMessage = runReminderJob(diaryEntries);
-  console.log(reminderMessage);
+  const reflectionMessage = await runReflectionJob(diaryEntries);
+  console.log(reflectionMessage);
 }
 
 main().catch((error: unknown) => {
