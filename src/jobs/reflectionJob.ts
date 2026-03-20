@@ -13,25 +13,48 @@ const EMPTY_REFLECTION_MESSAGE = [
 
 export interface RunReflectionJobOptions {
   afterDate?: string;
+  todayDate?: string;
+}
+
+export interface ReflectionJobResult {
+  message?: string;
+  selectedEntryCount: number;
 }
 
 export async function runReflectionJob(
   entries: ParsedDiaryEntry[],
   options: RunReflectionJobOptions = {},
 ): Promise<string> {
+  const result = await prepareReflectionJob(entries, options);
+
+  return result.message ?? EMPTY_REFLECTION_MESSAGE;
+}
+
+export async function prepareReflectionJob(
+  entries: ParsedDiaryEntry[],
+  options: RunReflectionJobOptions = {},
+): Promise<ReflectionJobResult> {
   const selectedEntries = selectReflectionEntries(entries, {
     afterDate: options.afterDate,
+    todayDate: options.todayDate,
   });
 
   if (selectedEntries.length === 0) {
-    return EMPTY_REFLECTION_MESSAGE;
+    return {
+      selectedEntryCount: 0,
+    };
   }
 
   const reflectionInput = buildReflectionInput(selectedEntries);
 
   if (!reflectionInput) {
-    return EMPTY_REFLECTION_MESSAGE;
+    return {
+      selectedEntryCount: selectedEntries.length,
+    };
   }
 
-  return generateReflectionMessage(reflectionInput);
+  return {
+    message: await generateReflectionMessage(reflectionInput),
+    selectedEntryCount: selectedEntries.length,
+  };
 }

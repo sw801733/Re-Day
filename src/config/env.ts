@@ -23,4 +23,7 @@ export const env = {
   NOTION_DATABASE_ID: readRequiredEnv("NOTION_DATABASE_ID"),
   OPENAI_API_KEY: readOptionalEnv("OPENAI_API_KEY"),
   OPENAI_MODEL: readOptionalEnv("OPENAI_MODEL"),
+  SLACK_BOT_TOKEN: readOptionalEnv("SLACK_BOT_TOKEN"),
+  SLACK_REMINDER_CHANNEL: readOptionalEnv("SLACK_REMINDER_CHANNEL"),
+  SLACK_REFLECTION_CHANNEL: readOptionalEnv("SLACK_REFLECTION_CHANNEL"),
 } as const;
