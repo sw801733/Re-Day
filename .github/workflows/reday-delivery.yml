@@ -1,0 +1,83 @@
+name: Re:Day Delivery
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC.
+    # 10:30 UTC = 19:30 KST, Monday-Friday.
+    - cron: "30 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reday-delivery-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run delivery flow
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_REMINDER_CHANNEL: ${{ secrets.SLACK_REMINDER_CHANNEL }}
+          SLACK_REFLECTION_CHANNEL: ${{ secrets.SLACK_REFLECTION_CHANNEL }}
+        run: npm run start
+
+      - name: Check state file changes
+        id: state_changes
+        if: success()
+        run: |
+          if git diff --quiet -- data/delivery-state.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Delivery state unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Delivery state changed."
+          fi
+
+      - name: Configure git user
+        if: success() && steps.state_changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit delivery state
+        if: success() && steps.state_changes.outputs.changed == 'true'
+        run: |
+          git add data/delivery-state.json
+          git commit -m "chore: update delivery state"
+
+      - name: Rebase latest branch
+        if: success() && steps.state_changes.outputs.changed == 'true'
+        run: |
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+
+      - name: Push delivery state
+        if: success() && steps.state_changes.outputs.changed == 'true'
+        run: git push origin "HEAD:${GITHUB_REF_NAME}"
