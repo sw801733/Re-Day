@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "preview:reflection-v2": "tsx src/index.ts reflection-v2",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js"
   },
