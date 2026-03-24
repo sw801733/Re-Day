@@ -4,6 +4,11 @@ import type { ParsedDiaryEntry, ReminderItem } from "../types/diary";
 
 export const RECENT_ENTRY_COUNT = 3;
 
+export interface ReminderJobResult {
+  message: string;
+  itemCount: number;
+}
+
 function getDateRank(value: string): number {
   const match = value.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
 
@@ -47,9 +52,16 @@ function sortReminderItems(items: ReminderItem[]): ReminderItem[] {
 }
 
 export function runReminderJob(entries: ParsedDiaryEntry[]): string {
+  return prepareReminderJob(entries).message;
+}
+
+export function prepareReminderJob(entries: ParsedDiaryEntry[]): ReminderJobResult {
   const recentEntries = sortEntriesByDateDesc(entries).slice(0, RECENT_ENTRY_COUNT);
   const groupedItems = groupReminderItems(recentEntries);
   const sortedItems = sortReminderItems(groupedItems);
 
-  return buildReminderMessage(sortedItems);
+  return {
+    message: buildReminderMessage(sortedItems),
+    itemCount: sortedItems.length,
+  };
 }
