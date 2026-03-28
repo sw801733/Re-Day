@@ -25,6 +25,14 @@ Re:Day는 Notion 일기를 읽고 Slack으로 `reminder` 와 `reflection` 메시
 npm run dev
 ```
 
+기본 delivery 실행에서 reflection은 현재 Reflection V2 생성 경로를 사용합니다.
+
+Reflection V2 메시지 포맷만 미리 확인하려면 아래 명령을 사용할 수 있습니다.
+
+```bash
+npm run preview:reflection-v2
+```
+
 프로덕션과 비슷하게 확인하려면 아래 순서로 실행합니다.
 
 ```bash
@@ -65,6 +73,12 @@ workflow는 아래 순서만 담당합니다.
 - `SLACK_BOT_TOKEN`
 - `SLACK_REMINDER_CHANNEL`
 - `SLACK_REFLECTION_CHANNEL`
+
+`NOTION_DATABASE_ID` 는 아래 형태를 모두 허용합니다.
+
+- 하이픈이 포함된 UUID
+- 하이픈이 없는 32자리 ID
+- Notion 데이터베이스 URL 전체
 
 누락된 값이 있으면 앱 실행 중 명확한 에러로 실패합니다.
 
