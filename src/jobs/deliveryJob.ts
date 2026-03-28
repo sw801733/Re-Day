@@ -7,7 +7,7 @@ import {
   updateReminderSendDate,
 } from "../storage/stateStore";
 import type { ParsedDiaryEntry } from "../types/diary";
-import { prepareReflectionJob } from "./reflectionJob";
+import { prepareReflectionV2Job } from "./reflectionV2Job";
 import { prepareReminderJob } from "./reminderJob";
 
 type WeekdayName =
@@ -152,7 +152,7 @@ export async function runDeliveryJob(now: Date = new Date()): Promise<void> {
   }
 
   if (shouldAttemptReflection) {
-    const reflectionResult = await prepareReflectionJob(entries, {
+    const reflectionResult = await prepareReflectionV2Job(entries, {
       afterDate: state.lastReflectionDate ?? undefined,
       todayDate: context.date,
     });
