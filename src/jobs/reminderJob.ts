@@ -1,3 +1,4 @@
+import { buildReminderFallbackMessage } from "../services/buildReminderFallbackMessage";
 import { buildReminderMessage } from "../services/buildReminderMessage";
 import { groupReminderItems } from "../services/groupReminderItems";
 import type { ParsedDiaryEntry, ReminderItem } from "../types/diary";
@@ -59,6 +60,13 @@ export function prepareReminderJob(entries: ParsedDiaryEntry[]): ReminderJobResu
   const recentEntries = sortEntriesByDateDesc(entries).slice(0, RECENT_ENTRY_COUNT);
   const groupedItems = groupReminderItems(recentEntries);
   const sortedItems = sortReminderItems(groupedItems);
+
+  if (sortedItems.length === 0) {
+    return {
+      message: buildReminderFallbackMessage(),
+      itemCount: 0,
+    };
+  }
 
   return {
     message: buildReminderMessage(sortedItems),

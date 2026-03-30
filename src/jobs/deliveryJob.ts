@@ -1,3 +1,4 @@
+import { buildReflectionFallbackMessage } from "../services/buildReflectionFallbackMessage";
 import { fetchDiaryEntries } from "../services/fetchDiaryEntries";
 import { sendReflectionMessage } from "../services/sendReflectionMessage";
 import { sendReminderMessage } from "../services/sendReminderMessage";
@@ -35,6 +36,77 @@ const REMINDER_WEEKDAYS = new Set<WeekdayName>([
   "Friday",
 ]);
 const REFLECTION_WEEKDAYS = new Set<WeekdayName>(["Monday", "Thursday"]);
+
+function getDateRank(value: string): number {
+  const match = value.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+
+  if (!match) {
+    return -1;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return -1;
+  }
+
+  const parsedDate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() !== month - 1 ||
+    parsedDate.getUTCDate() !== day
+  ) {
+    return -1;
+  }
+
+  return year * 10000 + month * 100 + day;
+}
+
+function filterDiaryEntriesBeforeDate(
+  entries: ParsedDiaryEntry[],
+  endExclusiveDate: string,
+): ParsedDiaryEntry[] {
+  const endExclusiveDateRank = getDateRank(endExclusiveDate);
+
+  return entries.filter((entry) => {
+    const entryDateRank = getDateRank(entry.date);
+
+    if (entryDateRank < 0) {
+      return false;
+    }
+
+    if (endExclusiveDateRank < 0) {
+      return true;
+    }
+
+    return entryDateRank < endExclusiveDateRank;
+  });
+}
+
+function hasNewReflectionDiaryEntries(
+  entries: ParsedDiaryEntry[],
+  options: { afterDate?: string; todayDate: string },
+): boolean {
+  const afterDateRank = options.afterDate ? getDateRank(options.afterDate) : -1;
+
+  return filterDiaryEntriesBeforeDate(entries, options.todayDate).some(
+    (entry) => getDateRank(entry.date) > afterDateRank,
+  );
+}
+
+function findLatestDiaryDate(
+  entries: ParsedDiaryEntry[],
+  todayDate: string,
+): string | undefined {
+  const entriesBeforeToday = filterDiaryEntriesBeforeDate(entries, todayDate);
+
+  return [...entriesBeforeToday]
+    .sort((left, right) => getDateRank(right.date) - getDateRank(left.date))[0]
+    ?.date;
+}
 
 function getKstDeliveryContext(now: Date = new Date()): DeliveryDateContext {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -135,43 +207,67 @@ export async function runDeliveryJob(now: Date = new Date()): Promise<void> {
     const reminderResult = prepareReminderJob(entries);
 
     if (reminderResult.itemCount === 0) {
-      console.log("[delivery] reminder 내용을 만들 수 없어 전송을 건너뜁니다.");
-    } else {
-      logMessagePreview("Reminder", reminderResult.message);
+      console.log("[delivery] reminder TODO가 없어 fallback 메시지를 전송합니다.");
+    }
 
-      try {
-        await sendReminderMessage(reminderResult.message);
-        await updateReminderSendDate(context.date);
-        console.log("[delivery] reminder 전송 성공 후 state를 업데이트했습니다.");
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[delivery] reminder 전송 실패: ${message}`);
-        failures.push(`reminder: ${message}`);
-      }
+    logMessagePreview("Reminder", reminderResult.message);
+
+    try {
+      await sendReminderMessage(reminderResult.message);
+      await updateReminderSendDate(context.date);
+      console.log("[delivery] reminder 전송 성공 후 state를 업데이트했습니다.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[delivery] reminder 전송 실패: ${message}`);
+      failures.push(`reminder: ${message}`);
     }
   }
 
   if (shouldAttemptReflection) {
-    const reflectionResult = await prepareReflectionV2Job(entries, {
+    const hasNewDiaryEntries = hasNewReflectionDiaryEntries(entries, {
       afterDate: state.lastReflectionDate ?? undefined,
       todayDate: context.date,
     });
 
-    if (!reflectionResult.message) {
-      console.log(
-        "[delivery] reflection에 사용할 새 기록이 없거나 근거가 부족해 전송을 건너뜁니다.",
-      );
-    } else {
-      logMessagePreview("Reflection", reflectionResult.message);
+    if (!hasNewDiaryEntries) {
+      const fallbackMessage = buildReflectionFallbackMessage({
+        lastDiaryDate: findLatestDiaryDate(entries, context.date),
+      });
+
+      console.log("[delivery] 마지막 회고 이후 새 일지가 없어 fallback 메시지를 전송합니다.");
+      logMessagePreview("Reflection", fallbackMessage);
 
       try {
-        await sendReflectionMessage(reflectionResult.message);
+        await sendReflectionMessage(fallbackMessage);
         await updateReflectionSendDate(context.date);
         console.log("[delivery] reflection 전송 성공 후 state를 업데이트했습니다.");
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[delivery] reflection 전송 실패: ${message}`);
         failures.push(`reflection: ${message}`);
+      }
+    } else {
+      const reflectionResult = await prepareReflectionV2Job(entries, {
+        afterDate: state.lastReflectionDate ?? undefined,
+        todayDate: context.date,
+      });
+
+      if (!reflectionResult.message) {
+        console.log(
+          "[delivery] reflection에 사용할 새 기록이 없거나 근거가 부족해 전송을 건너뜁니다.",
+        );
+      } else {
+        logMessagePreview("Reflection", reflectionResult.message);
+
+        try {
+          await sendReflectionMessage(reflectionResult.message);
+          await updateReflectionSendDate(context.date);
+          console.log("[delivery] reflection 전송 성공 후 state를 업데이트했습니다.");
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[delivery] reflection 전송 실패: ${message}`);
+          failures.push(`reflection: ${message}`);
+        }
       }
     }
   }
