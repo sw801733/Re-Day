@@ -1,102 +1,247 @@
 # Re:Day
 
-Re:Day는 Notion 일기를 읽고 Slack으로 `reminder` 와 `reflection` 메시지를 보내는 개인 자동화 프로젝트입니다.
+> 기록을 다시 보여줘서 행동을 이어지게 만드는 개인 루프 시스템
 
-핵심 로직은 앱 코드가 담당하고, GitHub Actions는 정해진 시각에 앱을 한 번 실행하고 변경된 상태 파일을 저장하는 역할만 맡습니다.
+---
 
-## 실행 스케줄
+## ✨ Overview
 
-- 목표 전송 시각: 평일 19:30 KST
-- GitHub Actions cron 기준: `30 10 * * 1-5`
-- 중요한 점: GitHub Actions cron 표현식은 KST가 아니라 UTC 기준입니다.
-- 즉, `10:30 UTC = 19:30 KST` 이므로 workflow에는 UTC 값으로 적습니다.
+Re:Day는 **Notion에 기록한 일지를 기반으로**
 
-앱 내부 판단 규칙은 `src/jobs/deliveryJob.ts` 에 있습니다.
+* 최근 흐름을 다시 인식하고
+* 이어서 할 행동을 자연스럽게 떠올리게 만드는
 
-- 월요일 / 목요일: reminder + reflection
-- 화요일 / 수요일 / 금요일: reminder only
-- 토요일 / 일요일: skip
+**개인 리마인드 + 회고 자동화 시스템**입니다.
 
-## 로컬 실행
+---
 
-필수 환경변수를 `.env` 에 준비한 뒤 아래 명령으로 실행할 수 있습니다.
+## 🧠 Core Concept
 
-```bash
-npm run dev
+```
+기록 → 회고 → 행동
 ```
 
-기본 delivery 실행에서 reflection은 현재 Reflection V2 생성 경로를 사용합니다.
+* **기록**: 하루를 간단히 남김
+* **회고**: 최근 흐름을 다시 마주침
+* **행동**: 다음 행동을 이어서 시작
 
-Reflection V2 메시지 포맷만 미리 확인하려면 아래 명령을 사용할 수 있습니다.
+---
 
-```bash
-npm run preview:reflection-v2
+## 🚀 Features
+
+### 1️⃣ Reminder (행동 트리거)
+
+* 평일 저녁 Slack 메시지 전송
+* 최근 기록에서 TODO 추출
+* AI 사용 없음 (빠르고 안정적)
+
+```
+Re:Day
+
+오늘 이어서 할 수 있는 것
+• CodeTune TODO 정리
+• 책 10페이지 읽기
 ```
 
-프로덕션과 비슷하게 확인하려면 아래 순서로 실행합니다.
+---
 
-```bash
-npm run build
-npm run start
+### 2️⃣ Reflection (상태 인식)
+
+* 주 2회 (월 / 목)
+* 최근 기록을 묶어서 요약
+
+```
+🌿 Re:Day
+
+요즘 흐름
+- 운동은 꾸준히 이어지고 있음
+- CodeTune은 간헐적으로 진행됨
+
+행동 기록
+- 운동 3회
+- CodeTune 2회
 ```
 
-GitHub Actions 추가는 로컬 실행을 대체하지 않습니다. 기존 로컬 실행 흐름은 그대로 유지됩니다.
+---
 
-## GitHub Actions workflow
+### 3️⃣ Smart Delivery
 
-Workflow 파일은 `.github/workflows/reday-delivery.yml` 입니다.
+* **새로운 기록이 있을 때만 전송**
+* 불필요한 알림 제거
+* 의미 있는 메시지만 전달
 
-지원 트리거:
+---
 
-- `schedule`
-- `workflow_dispatch`
+## 🏗 Architecture
 
-workflow는 아래 순서만 담당합니다.
+### System Overview
 
-1. 저장소 checkout
-2. Node.js 설정
-3. `npm ci`
-4. `npm run build`
-5. `npm run start`
-6. 변경된 상태 파일 commit / push
+```mermaid
+flowchart LR
+    U[User]
+    N[Notion]
+    R[Re:Day]
+    O[OpenAI]
+    S[Slack]
 
-비즈니스 로직은 workflow에 중복으로 넣지 않고, 앱 실행 결과에 따라 상태 파일만 저장합니다.
+    U -->|Write| N
+    N -->|Read| R
+    R -->|Summarize| O
+    O --> R
+    R -->|Send| S
+```
 
-## GitHub Secrets
+---
 
-아래 값들을 GitHub repository secrets에 등록해야 합니다.
+### Internal Structure
 
-- `NOTION_API_KEY`
-- `NOTION_DATABASE_ID`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `SLACK_BOT_TOKEN`
-- `SLACK_REMINDER_CHANNEL`
-- `SLACK_REFLECTION_CHANNEL`
+```mermaid
+flowchart TD
+    A[Scheduler]
+    B[Flow Controller]
 
-`NOTION_DATABASE_ID` 는 아래 형태를 모두 허용합니다.
+    C[Reminder Flow]
+    D[Reflection Flow]
 
-- 하이픈이 포함된 UUID
-- 하이픈이 없는 32자리 ID
-- Notion 데이터베이스 URL 전체
+    E[Notion Reader]
+    F[Entry Parser]
 
-누락된 값이 있으면 앱 실행 중 명확한 에러로 실패합니다.
+    G[Reminder Generator]
+    H[Reflection Generator]
+    I[AI Summary]
 
-## 수동 실행
+    J[Message Formatter]
+    K[Slack Sender]
 
-GitHub 저장소의 `Actions` 탭에서 `Re:Day Delivery` workflow를 선택한 뒤 `Run workflow` 로 수동 실행할 수 있습니다.
+    L[State Store]
 
-수동 실행도 동일한 앱 엔트리포인트를 사용하므로, 스케줄 실행과 같은 규칙으로 동작합니다.
+    A --> B
+    B --> C
+    B --> D
 
-## State Persistence
+    C --> E
+    D --> E
 
-MVP에서는 `data/delivery-state.json` 파일을 Git에 추적하고, workflow 실행 후 이 파일이 바뀐 경우에만 commit / push 합니다.
+    E --> F
 
-이 방식의 동작은 다음과 같습니다.
+    F --> G
+    F --> H
 
-- 앱이 전송 성공 후에만 state를 갱신합니다.
-- 전송이 없거나 skip이면 state 파일은 바뀌지 않습니다.
-- workflow는 변경된 state 파일이 있을 때만 commit 합니다.
-- push 실패는 workflow 실패로 남겨서 silent failure를 피합니다.
+    H --> I
 
-기존 로컬 환경에 `src/storage/state.json` 이 남아 있다면, 새 tracked 파일이 없을 때 한 번만 `data/delivery-state.json` 으로 마이그레이션합니다.
+    G --> J
+    H --> J
+
+    J --> K
+
+    B <--> L
+```
+
+---
+
+### Flow Logic
+
+```mermaid
+sequenceDiagram
+    participant Scheduler
+    participant ReDay
+    participant Notion
+    participant AI
+    participant Slack
+
+    Scheduler->>ReDay: trigger
+    ReDay->>Notion: fetch entries
+
+    alt no new entries
+        ReDay->>ReDay: stop
+    else new entries
+        ReDay->>ReDay: parse
+
+        alt reminder
+            ReDay->>ReDay: extract TODO
+        else reflection
+            ReDay->>AI: summarize
+            AI-->>ReDay: result
+        end
+
+        ReDay->>Slack: send message
+    end
+```
+
+---
+
+## ⚙️ Tech Stack
+
+* **Runtime**: Node.js
+* **API**
+
+  * Notion API
+  * Slack API
+  * OpenAI API (reflection only)
+* **Infra**
+
+  * GitHub Actions (scheduler)
+
+---
+
+## 🔑 Environment Variables
+
+```env
+NOTION_API_KEY=
+NOTION_DATABASE_ID=
+
+OPENAI_API_KEY=
+OPENAI_MODEL=
+
+SLACK_BOT_TOKEN=
+SLACK_REMINDER_CHANNEL=
+SLACK_REFLECTION_CHANNEL=
+```
+
+---
+
+## 🛠 How It Works
+
+1. Scheduler runs (GitHub Actions or manual)
+2. Fetch recent entries from Notion
+3. Check if new entries exist
+4. Generate message
+
+   * Reminder → TODO 기반
+   * Reflection → AI 요약
+5. Send message to Slack
+6. Update state
+
+---
+
+## 📦 MVP Scope
+
+* [x] Notion 일지 조회
+* [x] TODO 리마인드 전송
+* [x] 주 2회 회고 메시지
+
+---
+
+## 🔮 Future Plans
+
+* Pattern analysis (행동 흐름)
+* Keyword frequency tracking
+* Insight messages
+* Slack assistant (CLI-style interaction)
+
+---
+
+## 💡 Design Philosophy
+
+### 1. Action-driven
+
+단순 기록이 아니라 **행동을 이어주는 시스템**
+
+### 2. Minimal AI
+
+AI는 보조 역할
+→ 없어도 시스템 동작 가능
+
+### 3. Signal over Noise
+
+의미 있는 메시지만 전달
